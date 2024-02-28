@@ -1,0 +1,117 @@
+#include <Arduino.h>
+
+//핀 선언
+#define IR_1 13
+#define IR_2 12
+#define Photo 16
+#define stepPinStepper   25
+#define dirPinStepper    26
+#define enablePinStepper 27
+
+//sampling time 선언
+#define DESIRED_SAMPLING_TIME  10 //10micro second
+unsigned long long g_current_sampling_time = 0;
+unsigned long long g_start_sampling_time = 0;
+unsigned long long g_base_time_tick = 0;
+bool g_flag_sampling_time = false; // check sampling time to run program
+//시작위치 0 선언
+long start_position = 0;
+
+//NEMA17 STEPPER MOTOR
+float step_angle = 0.06;    //degree per step
+float limit_angle = 20;
+long speed = 234;           //microsec per step
+int Acc = 200;              //acceleration
+int ms = 32;                //microstep from motordriver(TMC2225)
+long pulse = 30000;
+
+#include <FastAccelStepper.h>
+FastAccelStepperEngine engine = FastAccelStepperEngine();   //fastaccelstepper클래스의 engine 인스턴스 생성
+FastAccelStepper *stepper = NULL;                           //
+
+void check_sampling_time(){
+    g_current_sampling_time = micros();
+    if(g_current_sampling_time - g_start_sampling_time > DESIRED_SAMPLING_TIME)
+    {
+        g_flag_sampling_time = true;
+        g_base_time_tick ++;
+        g_start_sampling_time = g_current_sampling_time;
+    }
+}
+
+void call_current_position(){
+    static unsigned long time_tick = 0;                     //time_tick 선언
+    if(g_base_time_tick == 0){                              //딱 처음 0일때 time_tick도 0
+        time_tick = 0;
+    }
+    if(time_tick % 100000 == 0){
+    Serial.print("CurrentPosition = ");
+    Serial.println(stepper->getCurrentPosition());
+    }
+    time_tick ++;
+}
+
+void stepper_init(){                           
+    if(stepper){
+        start_position = stepper->getCurrentPosition();
+
+        stepper->setSpeedInUs(speed);
+        stepper->setAcceleration(Acc);
+        stepper->runForward();
+        stepper->moveTo(pulse, false);
+    }else{
+        Serial.println("Stepper Connection is failed.");
+    }
+    
+}
+
+void call_back_IR_1(){
+    Serial.println("IR_1");
+}
+    
+void call_back_IR_2(){
+    Serial.println("IR_2");
+}
+    
+void call_back_Photo()
+{   
+    Serial.println("limit");
+    /*
+    long LOWER_POS = stepper->getCurrentPosition();
+    stepper->forceStop();    
+    long zero_POS = (LOWER_POS - start_position) / 2;
+    
+    stepper->runBackward();
+    stepper->move(zero_POS, true);
+    */
+}
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(IR_1, INPUT_PULLUP);
+    pinMode(IR_2, INPUT_PULLUP);
+    pinMode(Photo, INPUT);
+
+    attachInterrupt(IR_1, call_back_IR_1, RISING);
+    attachInterrupt(IR_2, call_back_IR_2, RISING);
+    attachInterrupt(Photo, call_back_Photo, FALLING);
+
+    engine.init();
+    stepper = engine.stepperConnectToPin(stepPinStepper);
+    stepper->setDirectionPin(dirPinStepper);
+    stepper->setEnablePin(enablePinStepper);
+    stepper->setAutoEnable(true);
+    
+    //stepper_init();
+}
+
+void loop() 
+{   
+    check_sampling_time();
+
+    if(g_flag_sampling_time){
+        call_current_position();
+        g_flag_sampling_time = false;
+    }
+    
+}

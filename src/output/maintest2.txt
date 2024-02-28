@@ -1,0 +1,248 @@
+#include <Arduino.h>
+#include <FastAccelStepper.h>
+
+//핀 선언
+#define IR_1 13
+#define IR_2 12
+#define PHOTO 14
+#define STEPPER_STEP  25
+#define STEPPER_DIR   26
+#define STEPPER_ENABLE 27
+
+#define STEP_ANGLE 0.06
+#define MICRO_STEPPING 32
+
+//flag 선언(For Extenal Interrupt)
+volatile bool IR_1_flag = false;
+volatile bool IR_2_flag = false;
+volatile bool Photo_flag = false;
+volatile bool zero_POS_set_yet = false;
+volatile bool moved_to_zero_flag = false;
+volatile bool moved_to_zero_finished = false;
+
+//sampling time 선언
+#define DESIRED_SAMPLING_TIME  10 //10micro second
+unsigned long long g_current_sampling_time = 0;
+unsigned long long g_start_sampling_time = 0;
+unsigned long long g_base_time_tick = 0;
+bool g_flag_sampling_time = false; // check sampling time to run program
+
+//시작위치 0 선언
+long start_position = 0;
+long zero_POS ;
+long CURRENT_POSITION ; 
+long tilting_POS ;
+//motor val setting (초기 운전)
+long speed = 234;           //microsec per step
+int Acc = 100000;              //acceleration
+int MSR = 32;                //microstep from motordriver(TMC2225)
+long pulse = 192000;
+
+//NEMA17 STEPPER MOTOR
+float step_angle = 0.06;    //degree per step      , 192000step per cyc
+
+float zero_angle = 45;     //angle to zero position (limitswitch부터 zero position까지의 각도)
+float zero_pulse = zero_angle / step_angle * MSR ;       //this value is for synch with 'zero_POS'
+
+FastAccelStepperEngine engine = FastAccelStepperEngine();   //fastaccelstepper클래스의 engine 인스턴스 생성
+FastAccelStepper *stepper = NULL;                           //기본세팅
+
+//====================================
+long angle_to_pulse(float angle)
+{
+    return (long)(MICRO_STEPPING * angle / STEP_ANGLE);
+}
+
+//====================================
+float pulse_to_angle(long pulse)
+{
+    return (float)(STEP_ANGLE * (float)pulse / MICRO_STEPPING);
+}
+
+//====================================
+void reset_system(){
+
+}
+
+//====================================
+void check_sampling_time(){
+    g_current_sampling_time = micros();
+    if(g_current_sampling_time - g_start_sampling_time > DESIRED_SAMPLING_TIME)
+    {
+        g_flag_sampling_time = true;
+        g_base_time_tick ++;
+        g_start_sampling_time = g_current_sampling_time;
+    }
+}
+
+//====================================
+void call_current_position(){
+    static unsigned long time_tick = 0;                     //time_tick 선언
+    if(g_base_time_tick == 0){                              //딱 처음 0일때 time_tick도 0
+        time_tick = 0;
+    }
+    if(time_tick % 1000 == 0){
+    Serial.print("CurrentPosition = ");
+    Serial.println(stepper->getCurrentPosition());
+    }
+    time_tick ++;
+}
+
+void call_tilting_position(){
+    static unsigned long time_tick = 0;                     //time_tick 선언
+    if(g_base_time_tick == 0){                              //딱 처음 0일때 time_tick도 0
+        time_tick = 0;
+    }
+    if(time_tick % 1000 == 0){
+    Serial.print("CurrentPosition2 = ");
+    Serial.println(tilting_POS);
+    }
+    time_tick ++;
+}
+
+
+//====================================
+void move_to_zero(){
+    if(Photo_flag){
+        moved_to_zero_flag = true;
+        long LOWER_POS = stepper->getCurrentPosition();
+        Serial.print("LOWER_POS : ");
+        Serial.println(LOWER_POS);
+        stepper->forceStop();    
+        
+        if(!zero_POS_set_yet){                                              //딱  한번만 zero_set  해줌
+            zero_POS = LOWER_POS - angle_to_pulse(zero_angle);
+            zero_POS_set_yet = true;
+        }
+        stepper->runForward();
+        stepper->moveTo(zero_POS, false);
+
+        moved_to_zero_finished = true;
+        moved_to_zero_flag = true;
+        Photo_flag = false;
+
+        //  모터가 zero_POS로  이동한 후에 zero_POS를  0으로 설정합니다.
+        //  모터의  현재  위치가 zero_POS와  일치하는지 확인합니다.
+        if (stepper->getCurrentPosition() == zero_POS) {
+            //  모터의  현재  위치가 zero_POS와  일치하면, zero_POS를  0으로 설정합니다.
+            zero_POS =  0;
+            // 필요에 따라,  여기에 추가적인  로직을 삽입할  수 있습니다.
+        }
+    }
+}
+
+//====================================
+void stepper_start()
+{                           
+    if(stepper){
+        start_position = stepper->getCurrentPosition();
+
+        stepper->setSpeedInUs(speed);
+        stepper->setAcceleration(Acc);
+        stepper->runForward();
+        stepper->moveTo(pulse, false);
+
+    }else{
+        Serial.println("Stepper Connection is failed.");
+    }
+}
+
+//====================================
+void start_tilting(float frequency, float tilt_range)
+{   
+    if(moved_to_zero_finished){
+        stepper->setCurrentPosition(0);
+        moved_to_zero_finished = false;
+    }
+    static unsigned long time_tick = 0;
+    if(g_base_time_tick == 0){                              
+        time_tick = 0;
+    }
+
+    float upper_limit = 90;
+    float lower_limit = -90;
+
+    if(moved_to_zero_flag){
+        
+        long tilt_pulse = angle_to_pulse(tilt_range);
+        unsigned long period = 100000 / frequency;                      //주기 = 1/주파수 (micro)
+        
+        /*
+        // Calculate current tilt angle in degree
+        float current_angle = pulse_to_angle(stepper->getCurrentPosition());
+
+        // Check if the current angle is within the limit
+        if(current_angle > upper_limit || current_angle < lower_limit){
+            // 앵글을 벗어나면 리셋
+            reset_system();
+            return;
+        }*/
+        
+        
+        if(time_tick >= period)
+        {
+            if(stepper->getCurrentPosition() >= zero_POS){
+                stepper->moveTo(zero_POS - tilt_pulse);
+            }else{
+                stepper->moveTo(zero_POS + tilt_pulse);
+            }
+            time_tick = 0;
+        }
+    }
+    time_tick++;   
+}
+
+//====================================
+void call_back_IR_1()
+{
+    IR_1_flag = true;
+}
+    
+//====================================
+void call_back_IR_2()
+{
+    IR_2_flag = true;
+}
+    
+//====================================
+void call_back_Photo()
+{   
+    Photo_flag = true;
+}
+
+//====================================
+
+void setup() 
+{
+    Serial.begin(115200);
+    pinMode(IR_1, INPUT_PULLUP);
+    pinMode(IR_2, INPUT_PULLUP);
+    pinMode(PHOTO, INPUT);
+
+    attachInterrupt(digitalPinToInterrupt(IR_1), call_back_IR_1, RISING);
+    attachInterrupt(digitalPinToInterrupt(IR_2), call_back_IR_2, RISING);
+    attachInterrupt(digitalPinToInterrupt(PHOTO), call_back_Photo, FALLING);
+
+    engine.init();
+    stepper = engine.stepperConnectToPin(STEPPER_STEP);
+    stepper->setDirectionPin(STEPPER_DIR, false);
+    stepper->setEnablePin(STEPPER_ENABLE);
+    stepper->setAutoEnable(true);
+    stepper->setSpeedInUs(speed);
+    stepper_start();
+
+    // 제로 포지션을 설정하고, 시작 시 위치를 확인합니다.
+    move_to_zero();
+    Serial.print("Initial Position: ");
+    Serial.println(stepper->getCurrentPosition());
+}
+
+//====================================
+
+void loop() 
+{   
+    move_to_zero();
+    start_tilting(1, 2);    
+    Serial.print("Current Position: ");
+    Serial.println(stepper->getCurrentPosition());
+}

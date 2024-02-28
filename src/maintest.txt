@@ -1,0 +1,99 @@
+/*
+#include <Arduino.h>
+#include <FastAccelStepper.h>
+
+//핀 선언
+#define IR_1 13
+#define IR_2 12
+#define PHOTO 14
+#define STEPPER_STEP  25
+#define STEPPER_DIR   26
+#define STEPPER_ENABLE 27
+
+#define STEP_ANGLE 0.06
+#define MICRO_STEPPING 32
+
+//sampling time 선언
+#define DESIRED_SAMPLING_TIME  10 //10micro second
+unsigned long long g_current_sampling_time = 0;
+unsigned long long g_start_sampling_time = 0;
+unsigned long long g_base_time_tick = 0;
+bool g_flag_sampling_time = false; // check sampling time to run program
+
+//시작위치 0 선언
+long start_position = 0;
+long zero_POS ;
+long CURRENT_POSITION ; 
+
+//motor val setting (초기 운전)
+long speed = 234;           //microsec per step
+int Acc = 100000;              //acceleration
+int MSR = 32;                //microstep from motordriver(TMC2225)
+long pulse = 192000;
+
+//NEMA17 STEPPER MOTOR
+float step_angle = 0.06;    //degree per step      , 192000step per cyc
+
+float zero_angle = 45;     //angle to zero position (limitswitch부터 zero position까지의 각도)
+float zero_pulse = zero_angle / step_angle * MSR ;       //this value is for synch with 'zero_POS'
+
+FastAccelStepperEngine engine = FastAccelStepperEngine();   //fastaccelstepper클래스의 engine 인스턴스 생성
+FastAccelStepper *stepper = NULL;                           //기본세팅
+
+void check_sampling_time(){
+    g_current_sampling_time = micros();
+    if(g_current_sampling_time - g_start_sampling_time > DESIRED_SAMPLING_TIME)
+    {
+        g_flag_sampling_time = true;
+        g_base_time_tick ++;
+        g_start_sampling_time = g_current_sampling_time;
+    }
+}
+
+void call_current_position(){
+    static unsigned long time_tick = 0;                     //time_tick 선언
+    if(g_base_time_tick == 0){                              //딱 처음 0일때 time_tick도 0
+        time_tick = 0;
+    }
+    if(time_tick % 1000 == 0){
+    Serial.print("CurrentPosition = ");
+    Serial.println(stepper->getCurrentPosition());
+    }
+    time_tick ++;
+}
+
+void setup() 
+{
+    Serial.begin(115200);
+    pinMode(IR_1, INPUT_PULLUP);
+    pinMode(IR_2, INPUT_PULLUP);
+    pinMode(PHOTO, INPUT);
+
+    //attachInterrupt(digitalPinToInterrupt(IR_1), call_back_IR_1, RISING);
+    //attachInterrupt(digitalPinToInterrupt(IR_2), call_back_IR_2, RISING);
+    //attachInterrupt(digitalPinToInterrupt(PHOTO), call_back_Photo, FALLING);
+
+    engine.init();
+    stepper = engine.stepperConnectToPin(STEPPER_STEP);
+    stepper->setDirectionPin(STEPPER_DIR, false);
+    stepper->setEnablePin(STEPPER_ENABLE);
+    stepper->setAutoEnable(true);
+    stepper->setSpeedInUs(speed);
+    
+}
+
+void loop() 
+{
+    
+    stepper->setSpeedInUs(234);
+    stepper->setAcceleration(1000);
+    stepper->runForward();
+    stepper->moveTo(1000);
+    if(!stepper->isRunning()){
+        Serial.print("position : ");
+        Serial.println(stepper->getCurrentPosition());
+        stepper->setCurrentPosition(0);
+    }
+    stepper->moveTo(-1000);
+}
+*/
