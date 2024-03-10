@@ -124,7 +124,7 @@ float pulse_to_angle(long pulse)
 //====================================
 void reset_system()
 {
-//넘으면 다시 setup 시작s
+//넘으면 다시 setup 시작
 }
 
 //====================================
@@ -309,7 +309,6 @@ void tilt_fun()
         target_position = Upper_target;
     }
     stepper->moveTo(target_position);  
-    
 }
 
 void setup()
@@ -348,6 +347,7 @@ void setup()
     timerAlarmWrite(g_hw_timer, 1000, true);  // 1000 ticks : 1ms 
     timerAlarmEnable(g_hw_timer);
 }
+
 void generate_control_command(unsigned long cnt, float& g_freq_ref, float& g_tilt_range_ref, float& g_pivot_angle_ref)
 {
     if(cnt == 1000){
@@ -449,10 +449,7 @@ void select_mode()
             //}
             //tran_fun_finished = false;
         }
-        
-        
     }
-
 }
 
 void loop_fun()
@@ -471,7 +468,6 @@ void loop_fun()
             break;
         }
 }
-
 /*          이런 방법도 있지만 포인터를 사용하면 더 쉽게 더 간결하게 코드 작성이 가능하다. !
     if(g_timer_count < 15000){
         mode = 0;
